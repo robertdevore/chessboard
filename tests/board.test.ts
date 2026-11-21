@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createServer } from 'node:http'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -56,15 +56,22 @@ test('official local Board: bootstrap, leases, replies, completion, and cursor r
   }
 })
 
-test('live journal rejects demo data and isolates checkpoint scopes', () => {
-  const db = openJournal(':memory:')
-  assert.throws(() => db.append('live', demoEvents, 'fixture'), /Only Board/)
-  const event = { ...demoEvents[0], source: 'board' as const, evidence: 'observed' as const }
-  db.append('A', [event, event], 'cursor')
-  assert.equal(db.read('A', 0, 10).length, 1)
-  assert.equal(db.read('B', 0, 10).length, 0)
-  assert.equal(db.cursor('A'), 'cursor')
-  db.close()
+test('live journal stays private, rejects demo data, and isolates checkpoint scopes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'chessboard-journal-'))
+  const path = join(root, 'journal.sqlite')
+  const db = openJournal(path)
+  try {
+    if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600)
+    assert.throws(() => db.append('live', demoEvents, 'fixture'), /Only Board/)
+    const event = { ...demoEvents[0], source: 'board' as const, evidence: 'observed' as const }
+    db.append('A', [event, event], 'cursor')
+    assert.equal(db.read('A', 0, 10).length, 1)
+    assert.equal(db.read('B', 0, 10).length, 0)
+    assert.equal(db.cursor('A'), 'cursor')
+  } finally {
+    db.close()
+    rmSync(root, { recursive: true })
+  }
 })
 
 test('loopback API rejects writes and cross-origin access', async () => {

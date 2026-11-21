@@ -1,10 +1,13 @@
 import { DatabaseSync } from 'node:sqlite'
-import { mkdirSync } from 'node:fs'
+import { closeSync, mkdirSync, openSync } from 'node:fs'
 import { dirname } from 'node:path'
 import type { Event } from '../src/domain.ts'
 
 export function openJournal(path: string) {
-  if (path !== ':memory:') mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+  if (path !== ':memory:') {
+    mkdirSync(dirname(path), { recursive: true, mode: 0o700 })
+    closeSync(openSync(path, 'a', 0o600))
+  }
   const db = new DatabaseSync(path)
   db.exec(`
     PRAGMA journal_mode = WAL;
