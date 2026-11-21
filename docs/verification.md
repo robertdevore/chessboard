@@ -21,3 +21,7 @@ Replay history starts at the first local observation. The initial snapshot estab
 Hosted task mutations were exercised on the official loopback backend, while the hosted Board received only read requests. Chessboard itself is read-only. It uses explicit Board labels for mission grouping and review, and follows only the configured Board per process. Source links depend on actual synced destinations or message links. RunLedger is an opt-in evidence reader for correlated receipts.
 
 The tests measure reducer throughput and verify transform and reduced-motion behavior in Chrome. They do not establish a frame-rate target across device classes.
+
+## Dependency advisory
+
+Dependabot alert [#1](https://github.com/robertdevore/chessboard/security/dependabot/1) reported the nested Zod 4.1.11 copy under Board → OIDC → CLI config. The package override updates only that nested dependency to the already-used Zod 4.6.7. The resolved tree contains one Zod version, the audit returned zero vulnerabilities, and the pinned CLI still authenticated against the hosted and official local Boards. [GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)

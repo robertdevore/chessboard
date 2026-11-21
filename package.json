@@ -12,5 +12,6 @@
     "test:browser": "playwright test"
   },
   "dependencies": { "@vercel/board": "0.54.0", "lucide-react": "0.468.0", "react": "^19.2.0", "react-dom": "^19.2.0" },
+  "overrides": { "@vercel/cli-config": { "zod": "4.6.7" } },
   "devDependencies": { "@playwright/test": "^1.56.1", "@types/node": "^24.0.0", "@types/react": "^19.2.0", "@types/react-dom": "^19.2.0", "@vitejs/plugin-react": "^5.1.0", "tsx": "^4.20.0", "typescript": "~5.9.3", "vite": "^7.2.0" }
 }
