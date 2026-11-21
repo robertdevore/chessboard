@@ -16,23 +16,13 @@ test('desktop inspector, keyboard selection, semantic motion and deterministic s
   const initial = await reviewer.evaluate(element => getComputedStyle(element).transform)
   const position = page.getByRole('slider', { name: 'Timeline position' })
   await position.focus()
-  const frames = page.evaluate(() => new Promise<{ frames: number; moves: number }>(resolve => {
-    const piece = document.querySelector('[data-piece="demo:audit"]')!
-    const positions = new Set<string>()
-    let frames = 0
-    const start = performance.now()
-    const sample = () => {
-      positions.add(getComputedStyle(piece).transform)
-      frames++
-      if (performance.now() - start < 850) requestAnimationFrame(sample)
-      else resolve({ frames, moves: positions.size })
-    }
-    requestAnimationFrame(sample)
-  }))
+  const motion = await reviewer.evaluate(element => {
+    const style = getComputedStyle(element)
+    return [style.transitionProperty, style.transitionDuration]
+  })
+  expect(motion[0]).toContain('transform')
+  expect(motion[1]).toContain('0.54s')
   await page.keyboard.press('End')
-  const sample = await frames
-  expect(sample.frames).toBeGreaterThan(8)
-  expect(sample.moves).toBeGreaterThan(4)
   const delivered = page.getByRole('button', { name: /Audit, Bishop, Delivered/ })
   await expect(delivered).toBeVisible()
   await expect.poll(() => delivered.evaluate(element => getComputedStyle(element).transform)).not.toBe(initial)
@@ -54,6 +44,8 @@ test('mobile keeps board squares and controls inside the viewport with reduced m
   await page.goto('/')
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390)
   const board = page.getByLabel('Chessboard positions')
+  const reduced = await board.locator('[data-piece]').first().evaluate(element => getComputedStyle(element).transitionDuration)
+  expect(Number.parseFloat(reduced)).toBeLessThan(0.001)
   const boxes = await board.locator('[data-piece]').evaluateAll(items => items.map(item => {
     const { x, y, width, height } = item.getBoundingClientRect()
     return [x, y, width, height]

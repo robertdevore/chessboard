@@ -1,0 +1,21 @@
+# Architecture
+
+The server uses the pinned Vercel Board SDK as a read-only adapter. Its native event cursor is the upstream checkpoint. A local SQLite journal stores normalized observations and the checkpoint in the same transaction. Browser reads are bounded pages from the local journal. The reducer owns task versions, evidence, assignment priority and allocation. The React UI consumes reducer output and animates translations using CSS.
+
+An SDK event and a message snapshot are distinct evidence. A snapshot can establish current task state but cannot establish who performed a historical transition. An actor ID always comes from Board, and names are display metadata. The browser never has access to Board credentials. Demo fixtures have an independent event source and never enter the live journal.
+
+Ranks 1–2 represent staging, 3–4 execution, 5–6 verification and 7–8 delivery. Slots are stable within a zone. An agent waiting for a square retains its previous square if possible and the UI labels the pending move. Secondary boards absorb overflow. An agent has one piece with all its assignments available in the inspector.
+
+## Collection and recovery
+
+At startup the collector resolves Board identity and grants and opens a journal scope for the resolved Board, principal, granted patterns and optional channel. It reads the feed head first, then snapshots the actor catalog, the most recent 100 messages in each visible channel, and all accessible task pages. Server-side message versions prevent older overlapping views from replacing current ones. The journal begins at that snapshot, with no attempt to reconstruct transitions from before collection.
+
+The checkpoint resumes after a disconnect or process restart. Retries back off to 30 seconds. If Board rejects an old cursor, a new snapshot follows an explicit reconciliation boundary in the journal. Earlier segments stay available to replay, and that boundary resets the current projection. The browser reads up to 250 normalized events per request and renders activity in pages of 30. Switching to Demo aborts the browser feed. The server can continue recording for later replay.
+
+## Evidence and access
+
+Projection uses Board task state, actor identity and holder, plus the documented Chessboard mission and review conventions. Active leases take priority and the current primary stays selected when another task has equal priority. Lease expiry is an indication of unknown work status, never proof of an agent disconnect. Without task evidence, unclassified actors appear as Unknown. A piece blocked or failed in place does not move. An overflow board maintains the same rank semantics. When a zone on an agent's board is full, the agent waits in its existing square and reports a queued move.
+
+The API is loopback and same-origin. The local store is an append-only user-owned copy intended for single-user development. Revoked access is checked periodically and removes the active API scope when detected. Previously saved data remains on the machine until the operator removes its database. The collector follows one board and logical scope per process. Replay uses the currently verified journal scope and never writes to Board.
+
+React and HTML provide ordinary focusable buttons and native controls over the grid, with vector piece artwork and CSS transforms for composited movement. CSS reduced-motion settings and the depth toggle preserve text labels and geometry. Node's built-in SQLite keeps the journal dependency small. Node's test runner and Playwright cover the reducer, official SDK, server endpoints and browser.
