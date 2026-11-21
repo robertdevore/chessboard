@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { performance } from 'node:perf_hooks'
-import { advance, project, square, visibleInMission } from '../src/domain.ts'
+import { advance, nextLeaseExpiry, project, refreshAt, square, visibleInMission } from '../src/domain.ts'
 import type { Event, TaskState } from '../src/domain.ts'
 import { demoEvents, demoMission, demoPreview } from '../src/demo.ts'
 
@@ -104,4 +104,15 @@ test('a reconciled snapshot clears stale current state while earlier playback is
   const current = project([before, reset, after])
   assert.equal(current.tasks.size, 0)
   assert.deepEqual([...current.agents.keys()], ['new'])
+})
+
+test('idle lease refresh reuses the projection until a live claim actually expires', () => {
+  const seen = observation(1, 'agent')
+  const claimed = observation(2, 'agent', 'job')
+  const state = project([seen, claimed])
+  const deadline = claimed.task!.leaseUntil!
+  assert.equal(nextLeaseExpiry(state, claimed.timestamp), deadline)
+  assert.equal(refreshAt(state, deadline - 1, claimed.timestamp), state)
+  assert.equal(refreshAt(state, deadline, claimed.timestamp).agents.get('agent')?.status, 'Unknown')
+  assert.equal(nextLeaseExpiry(state, deadline), undefined)
 })

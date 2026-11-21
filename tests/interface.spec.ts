@@ -75,3 +75,36 @@ test('save verified desktop and mobile screenshots', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 })
   await page.screenshot({ path: 'docs/screenshots/mobile.png', fullPage: true })
 })
+
+test('Live updates an expiring lease and replaces a restored journal at the same scope', async ({ page }) => {
+  const timestamp = Date.now()
+  const workerEvent = (name: string, id: string) => ({
+    id, source: 'board', sourceEventId: id, boardId: 'test-board', channelId: 'work',
+    actor: { id: name, name, kind: 'agent' }, type: 'task.claimed', evidence: 'observed',
+    timestamp, order: 1, taskId: id, threadId: id, relatedAgents: [],
+    task: { state: 'claimed', title: 'Verify handoff', owner: name, assignee: name, holder: name,
+      leaseUntil: timestamp + 5000, needs: [], note: null },
+  })
+  const before = workerEvent('First worker', 'original')
+  const restored = workerEvent('Restored worker', 'restored')
+  let current = before
+  await page.clock.install({ time: timestamp })
+  await page.route('**/api/events?*', route => {
+    const seen = new URL(route.request().url()).searchParams.get('seen')
+    return route.fulfill({ json: {
+      status: 'live', source: 'Local Board fixture', detail: 'Receiving Board observations.',
+      scope: 'same-scope', mapping: {}, more: false,
+      events: seen === current.id ? [] : [current],
+      reset: seen !== null && seen !== current.id,
+    } })
+  })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Live', exact: true }).click()
+  await expect(page.getByRole('button', { name: /First worker.*Executing/ })).toBeVisible()
+  await page.clock.runFor(5001)
+  await expect(page.getByRole('button', { name: /First worker.*Unknown/ })).toBeVisible()
+  current = restored
+  await page.clock.runFor(1500)
+  await expect(page.getByRole('button', { name: /Restored worker.*Unknown/ })).toBeVisible()
+  await expect(page.getByRole('button', { name: /First worker/ })).toHaveCount(0)
+})

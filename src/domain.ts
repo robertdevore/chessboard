@@ -162,6 +162,24 @@ export function advance(state: State, events: Event[], now?: number, mapping: Re
   return { agents, tasks, messages }
 }
 
+function claimExpiry({ task }: Assignment) {
+  return task.state === 'claimed' ? task.leaseUntil : null
+}
+
+export function nextLeaseExpiry(state: State, after: number): number | undefined {
+  let next = Infinity
+  for (const assignment of state.tasks.values()) {
+    const expiry = claimExpiry(assignment)
+    if (expiry !== null && expiry > after && expiry < next) next = expiry
+  }
+  return next === Infinity ? undefined : next
+}
+
+export function refreshAt(state: State, now: number, projectedAt = 0): State {
+  const expiry = nextLeaseExpiry(state, projectedAt)
+  return expiry !== undefined && expiry <= now ? advance(state, [], now) : state
+}
+
 export function visibleInMission(events: Event[], mission: string) {
   if (!mission) return events
   const threads = new Set<string>()

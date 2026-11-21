@@ -4,7 +4,7 @@ import {
   Activity, ArrowDownRight, ArrowRight, ChevronLeft, ChevronRight, CircleHelp, Clock3,
   Crosshair, Layers, ListFilter, Pause, Play, Radio, RotateCcw, Search, Terminal, X,
 } from 'lucide-react'
-import { advance, emptyState, files, roles, square, visibleInMission } from './domain.ts'
+import { advance, emptyState, files, nextLeaseExpiry, refreshAt, roles, square, visibleInMission } from './domain.ts'
 import type { Event, Piece, Role, State, Status } from './domain.ts'
 import { demoEvents, demoMission, demoPreview } from './demo.ts'
 import { ChessPiece, pieceNames } from './pieces.tsx'
@@ -22,17 +22,18 @@ const time = (milliseconds?: number) => milliseconds === undefined ? 'Unavailabl
 const formatType = (type: string) => type.replaceAll('_', ' ').replaceAll('.', ' ')
 const normalizeSearch = (value: string) => value.toLocaleLowerCase().trim()
 
-function useProjection(events: Event[], now: number | undefined, mapping: Record<string, Role>) {
+function useProjection(events: Event[], mapping: Record<string, Role>, filtered: boolean) {
   const cache = useRef({ events: emptyEvents, mapping: emptyMapping, state: emptyState() })
   return useMemo(() => {
     const previous = cache.current
     const index = previous.events.length
     const extendsHistory = previous.mapping === mapping && index <= events.length &&
-      previous.events[0] === events[0] && (!index || previous.events[index - 1] === events[index - 1])
+      previous.events[0] === events[0] && (!index || previous.events[index - 1] === events[index - 1]) &&
+      (!filtered || previous.events.every((event, position) => event === events[position]))
     const state = advance(extendsHistory ? previous.state : emptyState(), extendsHistory ? events.slice(index) : events, undefined, mapping)
     cache.current = { events, mapping, state }
-    return now === undefined ? state : advance(state, [], now, mapping)
-  }, [events, mapping, now])
+    return state
+  }, [events, mapping, filtered])
 }
 
 export function App() {
@@ -42,7 +43,7 @@ export function App() {
   const [cursor, setCursor] = useState(demoPreview)
   const [liveHold, setLiveHold] = useState<number>()
   const [speed, setSpeed] = useState(1)
-  const [clock, setClock] = useState(Date.now)
+  const [leaseTick, advanceLeaseClock] = useState(0)
   const [heldTime, setHeldTime] = useState<number>()
   const [mission, setMission] = useState('')
   const [role, setRole] = useState('')
@@ -63,7 +64,13 @@ export function App() {
   const missions = useMemo(() => [...new Set(visible.flatMap(event => event.metadata?.mission ?? []))].sort(), [visible])
   const scoped = useMemo(() => visibleInMission(visible, mission), [visible, mission])
   const mapping = mode === 'Demo' ? emptyMapping : feed.mapping
-  const state = useProjection(scoped, mode === 'Live' ? heldTime ?? clock : undefined, mapping)
+  const projected = useProjection(scoped, mapping, Boolean(mission))
+  const wallTime = mode === 'Live' ? heldTime ?? Date.now() : undefined
+  const projectedAt = scoped.at(-1)?.timestamp ?? 0
+  const state = useMemo(() => wallTime === undefined ? projected : refreshAt(projected, wallTime, projectedAt),
+    [projected, wallTime, projectedAt])
+  const nextExpiry = wallTime !== undefined && heldTime === undefined
+    ? nextLeaseExpiry(projected, Math.max(wallTime, projectedAt)) : undefined
   const agents = [...state.agents.values()]
   const tasks = [...state.tasks.values()].filter(task => !channel || task.event.channelId === channel)
   const channels = useMemo(() => [...new Set(scoped.flatMap(event => event.channelId ?? []))].sort(), [scoped])
@@ -92,10 +99,11 @@ export function App() {
   }
 
   useEffect(() => {
-    if (mode !== 'Live' || liveHold !== undefined) return
-    const interval = setInterval(() => setClock(Date.now()), 1000)
-    return () => clearInterval(interval)
-  }, [mode, liveHold])
+    if (nextExpiry === undefined) return
+    const timeout = setTimeout(() => advanceLeaseClock(tick => tick + 1),
+      Math.min(2_147_483_647, Math.max(1, nextExpiry - Date.now())))
+    return () => clearTimeout(timeout)
+  }, [nextExpiry, leaseTick])
   useEffect(() => {
     if (!playing || mode === 'Live') return
     if (cursor >= all.length) {
@@ -106,11 +114,12 @@ export function App() {
     const timer = setTimeout(() => setCursor(value => value + 1), Math.min(1800, Math.max(45, gap)) / speed)
     return () => clearTimeout(timer)
   }, [all, cursor, mode, playing, speed])
-  // An account or grant change evicts the previous feed from the browser.
+  // A new feed scope or journal resets the cursor and any held live view.
   useEffect(() => {
     setLiveHold(undefined)
     setHeldTime(undefined)
-  }, [feed.scope])
+    if (mode === 'Replay') setCursor(0)
+  }, [feed.scope, feed.epoch])
 
   function changeMode(next: Mode) {
     if (next === mode) return

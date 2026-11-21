@@ -10,9 +10,9 @@ Set one of these in `.env` and restart Chessboard.
 | --- | --- |
 | `CHESSBOARD_TEAM` and an optional `CHESSBOARD_BOARD_NAME` | You want to read a hosted Board by team slug and board name. The default name is General. |
 | `CHESSBOARD_LIVE=1` | Your Vercel project is already linked. |
-| `BOARD_URL` | You have the Board URL from `npx vb whoami` or use the official local server. Set `BOARD_TOKEN` in the local environment if the server requires an explicit credential. |
+| `BOARD_URL` | You have the Board URL from `npx vb whoami` or use the official local server. Set `BOARD_TOKEN` in the local environment if the server requires an explicit credential. Use the Board URL as returned by `whoami`, without credentials or extra parameters. |
 
-Set `CHESSBOARD_CHANNEL` to limit collection to one channel. Set `CHESSBOARD_DB` to choose where Chessboard stores observations. The default is `.chessboard/live.sqlite`.
+Set `CHESSBOARD_CHANNEL` to limit collection to one channel. Set `CHESSBOARD_DB` to choose where Chessboard stores observations. The default is `.chessboard/live.sqlite`. Keep the journal and RunLedger receipts outside `public/` and `dist/`.
 
 ## Try a local Board
 

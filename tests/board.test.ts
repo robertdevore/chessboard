@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { createServer } from 'node:http'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, statSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, statSync, symlinkSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { setTimeout as sleep } from 'node:timers/promises'
@@ -62,9 +62,9 @@ test('live journal stays private, rejects demo data, and isolates checkpoint sco
   const db = openJournal(path)
   try {
     if (process.platform !== 'win32') assert.equal(statSync(path).mode & 0o777, 0o600)
-    assert.throws(() => db.append('live', demoEvents, 'fixture'), /Only Board/)
+    assert.throws(() => db.append('live', demoEvents, 'fixture', undefined), /Only Board/)
     const event = { ...demoEvents[0], source: 'board' as const, evidence: 'observed' as const }
-    db.append('A', [event, event], 'cursor')
+    db.append('A', [event, event], 'cursor', undefined)
     assert.equal(db.read('A', 0, 10).length, 1)
     assert.equal(db.read('B', 0, 10).length, 0)
     assert.equal(db.cursor('A'), 'cursor')
@@ -84,6 +84,7 @@ test('loopback API rejects writes and cross-origin access', async () => {
   try {
     assert.equal((await fetch(url, { method: 'POST' })).status, 405)
     assert.equal((await fetch(url, { headers: { Origin: 'https://external.example' } })).status, 403)
+    assert.equal((await fetch(url, { headers: { 'Sec-Fetch-Site': 'same-site' } })).status, 403)
     const response = await fetch(url)
     const data = await response.json()
     assert.equal(data.status, 'off')
@@ -91,7 +92,7 @@ test('loopback API rejects writes and cross-origin access', async () => {
     assert.equal((await fetch(url.replace('/events', '/thread-evidence/1'))).status, 503)
   } finally {
     server.close()
-    await api.close()
+    await Promise.all([api.close(), api.close()])
   }
 })
 
@@ -107,7 +108,71 @@ test('RunLedger adapter reads only a bounded receipt inside the configured direc
       id: 'record', task: 'Verification', status: 'pass', model: 'agent', updated: '2026-11-21T10:00:00Z', testCount: 1,
     })
     assert.equal(await readReceipt(root, '../record'), undefined)
+    writeFileSync(join(root, 'runs', 'large.json'), Buffer.alloc(1_048_577))
+    assert.equal(await readReceipt(root, 'large'), undefined)
+    if (process.platform !== 'win32') {
+      symlinkSync(join(root, 'runs', 'record.json'), join(root, 'runs', 'alias.json'))
+      assert.equal(await readReceipt(root, 'alias'), undefined)
+    }
   } finally {
     rmSync(root, { recursive: true })
   }
+})
+
+test('a stale worker cannot overwrite a checkpoint or append out-of-order observations', () => {
+  const root = mkdtempSync(join(tmpdir(), 'chessboard-checkpoint-'))
+  const writer = openJournal(join(root, 'shared.sqlite'))
+  const slow = openJournal(join(root, 'shared.sqlite'))
+  const event = { ...demoEvents[0], source: 'board' as const, evidence: 'observed' as const }
+  try {
+    assert.equal(writer.append('A', [event], 'head', undefined), true)
+    const previous = slow.cursor('A')
+    assert.equal(writer.append('A', [], 'new-head', previous), true)
+    assert.equal(slow.append('A', [{ ...event, id: 'stale' }], 'stale-head', previous), false)
+    assert.equal(slow.append('A', [], 'new-head', 'new-head'), true)
+    assert.equal(slow.cursor('A'), 'new-head')
+    assert.deepEqual(slow.read('A', 0, 10).map(item => item.id), [event.id])
+  } finally {
+    slow.close()
+    writer.close()
+    rmSync(root, { recursive: true })
+  }
+})
+
+test('event API restarts an obsolete offset while leaving ordinary cursors intact', async () => {
+  const backend = local({ memory: true })
+  const team = board({ backend })
+  await team.post('release', 'Initial observation')
+  const api = createApi({ CHESSBOARD_LIVE: '1', CHESSBOARD_DB: ':memory:' }, () => team)
+  const server = createServer((req, res) => api.route(req, res))
+  await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
+  const address = server.address()
+  assert.ok(address && typeof address !== 'string')
+  const url = 'http://127.0.0.1:' + address.port + '/api/events'
+  const read = async (query = '') => (await fetch(url + query)).json()
+  try {
+    let page = await read()
+    const deadline = Date.now() + 5000
+    while (!page.events.length) {
+      assert.ok(Date.now() < deadline, JSON.stringify(page))
+      await sleep(25)
+      page = await read()
+    }
+    const last = page.events.at(-1)
+    const query = '?scope=' + page.scope + '&after=' + last.order + '&seen='
+    const valid = await read(query + encodeURIComponent(last.id))
+    assert.deepEqual(valid.events, [])
+    assert.equal(valid.reset, undefined)
+    const restored = await read(query + 'obsolete')
+    assert.equal(restored.reset, true)
+    assert.deepEqual(restored.events, page.events)
+  } finally {
+    server.close()
+    await api.close()
+    await backend.close()
+  }
+})
+
+test('Board URL credentials must use the separate server token setting', () => {
+  assert.throws(() => createApi({ BOARD_URL: 'https://board.example/?token=placeholder' }), /BOARD_TOKEN/)
 })

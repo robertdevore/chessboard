@@ -16,10 +16,10 @@ export function collect(handle: Handle, journal: Journal, boardId: string, chann
   let view: FeedView = { status: 'connecting', source, detail: 'Checking Board access.' }
   const query = { all: true, channel }
 
-  async function bootstrap(scope: string, gap = false) {
+  async function bootstrap(scope: string, previous?: string) {
     const { cursor } = await handle.poll({ ...query, wait: 0 }, signal.signal)
     const now = Date.now()
-    const observations: Event[] = gap ? [{
+    const observations: Event[] = previous !== undefined ? [{
       id: JSON.stringify([boardId, 'gap', now]), source: 'board', sourceEventId: cursor, boardId,
       type: 'snapshot.reconciled', timestamp: now, order: 0, evidence: 'snapshot', relatedAgents: [],
     }] : []
@@ -55,10 +55,10 @@ export function collect(handle: Handle, journal: Journal, boardId: string, chann
       }
       for (const message of messages.values()) observations.push(snapshot(boardId, message, now))
     }
-    if (gap) {
+    if (previous !== undefined) {
       for (const event of observations) event.id = JSON.stringify([event.id, 'reconciliation', now])
     }
-    if (!signal.signal.aborted) journal.append(scope, observations, cursor)
+    return !signal.signal.aborted && journal.append(scope, observations, cursor, previous)
   }
 
   async function follow() {
@@ -78,12 +78,14 @@ export function collect(handle: Handle, journal: Journal, boardId: string, chann
         const recheckAt = Date.now() + 60_000
         do {
           const startedAt = Date.now()
-          const page = await handle.poll({ ...query, after: journal.cursor(scope), wait: 15 }, signal.signal)
+          const previous = journal.cursor(scope)
+          const page = await handle.poll({ ...query, after: previous, wait: 15 }, signal.signal)
             .catch(async error => {
-              if (error?.code !== 'invalid_cursor' || signal.signal.aborted) throw error
+              if (error?.code !== 'invalid_cursor' || previous === undefined || signal.signal.aborted) throw error
+              if (journal.cursor(scope) !== previous) return undefined
               view = { status: 'connecting', source, detail: 'Board rejected the saved cursor. Reconciling current state.' }
-              await bootstrap(scope, true)
-              if (!signal.signal.aborted) view = { status: 'live', source, scope, detail: 'Current state reconciled after a history gap.' }
+              const reconciled = await bootstrap(scope, previous)
+              if (!signal.signal.aborted) view = { status: 'live', source, scope, detail: reconciled ? 'Current state reconciled after a history gap.' : 'Receiving Board observations.' }
               return undefined
             })
           if (!page) continue
@@ -91,7 +93,7 @@ export function collect(handle: Handle, journal: Journal, boardId: string, chann
           journal.append(scope, page.events.flatMap(event => {
             const normalized = normalize(boardId, event)
             return normalized ? [normalized] : []
-          }), page.cursor)
+          }), page.cursor, previous)
           view = { status: 'live', source, scope, detail: 'Receiving Board observations.' }
           backoff = 1000
           if (!page.events.length && Date.now() - startedAt < 750) {
@@ -100,7 +102,7 @@ export function collect(handle: Handle, journal: Journal, boardId: string, chann
         } while (!signal.signal.aborted && Date.now() < recheckAt)
       } catch (error) {
         if (signal.signal.aborted) return
-        const { status, code } = error as { status?: number; code?: string }
+        const { status, code } = (error ?? {}) as { status?: number; code?: string }
         if (status === 401 || status === 403 || code === 'not_logged_in' || code === 'no_token') {
           view = { source, status: 'denied', detail: 'Board denied access. Check your login and read grants.' }
         } else if (status === 400 || status === 404 || status === 501) {
