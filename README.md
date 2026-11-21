@@ -48,4 +48,4 @@ npx playwright install chromium
 npm run test:browser
 ```
 
-[Architecture](docs/architecture.md) · [Integration details](docs/integrations.md) · [Verification](docs/verification.md) · [Hardening audit](docs/audits/repository-hardening.md)
+[Technical tutorial](docs/tutorial.md) · [Architecture](docs/architecture.md) · [Integration details](docs/integrations.md) · [Verification](docs/verification.md) · [Hardening audit](docs/audits/repository-hardening.md)
