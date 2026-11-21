@@ -16,10 +16,13 @@ export function collect(handle: Handle, journal: Journal, boardId: string, chann
   let view: FeedView = { status: 'connecting', source, detail: 'Checking Board access.' }
   const query = { all: true, channel }
 
-  async function bootstrap(scope: string) {
+  async function bootstrap(scope: string, gap = false) {
     const { cursor } = await handle.poll({ ...query, wait: 0 }, signal.signal)
     const now = Date.now()
-    const observations: Event[] = []
+    const observations: Event[] = gap ? [{
+      id: JSON.stringify([boardId, 'gap', now]), source: 'board', sourceEventId: cursor, boardId,
+      type: 'snapshot.reconciled', timestamp: now, order: 0, evidence: 'snapshot', relatedAgents: [],
+    }] : []
     for (const actor of await handle.actors()) {
       observations.push(actorSnapshot(boardId, normalizeActor(actor.id, actor), now))
     }
@@ -52,6 +55,9 @@ export function collect(handle: Handle, journal: Journal, boardId: string, chann
       }
       for (const message of messages.values()) observations.push(snapshot(boardId, message, now))
     }
+    if (gap) {
+      for (const event of observations) event.id = JSON.stringify([event.id, 'reconciliation', now])
+    }
     if (!signal.signal.aborted) journal.append(scope, observations, cursor)
   }
 
@@ -71,7 +77,16 @@ export function collect(handle: Handle, journal: Journal, boardId: string, chann
         // Recheck grants periodically even when long-polls keep succeeding.
         const recheckAt = Date.now() + 60_000
         do {
+          const startedAt = Date.now()
           const page = await handle.poll({ ...query, after: journal.cursor(scope), wait: 15 }, signal.signal)
+            .catch(async error => {
+              if (error?.code !== 'invalid_cursor' || signal.signal.aborted) throw error
+              view = { status: 'connecting', source, detail: 'Board rejected the saved cursor. Reconciling current state.' }
+              await bootstrap(scope, true)
+              if (!signal.signal.aborted) view = { status: 'live', source, scope, detail: 'Current state reconciled after a history gap.' }
+              return undefined
+            })
+          if (!page) continue
           if (signal.signal.aborted) return
           journal.append(scope, page.events.flatMap(event => {
             const normalized = normalize(boardId, event)
@@ -79,11 +94,14 @@ export function collect(handle: Handle, journal: Journal, boardId: string, chann
           }), page.cursor)
           view = { status: 'live', source, scope, detail: 'Receiving Board observations.' }
           backoff = 1000
+          if (!page.events.length && Date.now() - startedAt < 750) {
+            await sleep(750, undefined, { signal: signal.signal }).catch(() => {})
+          }
         } while (!signal.signal.aborted && Date.now() < recheckAt)
       } catch (error) {
         if (signal.signal.aborted) return
-        const status = (error as { status?: number }).status
-        if (status === 401 || status === 403) {
+        const { status, code } = error as { status?: number; code?: string }
+        if (status === 401 || status === 403 || code === 'not_logged_in' || code === 'no_token') {
           view = { source, status: 'denied', detail: 'Board denied access. Check your login and read grants.' }
         } else if (status === 400 || status === 404 || status === 501) {
           view = { source, status: 'retrying', detail: 'Board could not read this feed. Check the Board URL, channel, and journal scope.' }

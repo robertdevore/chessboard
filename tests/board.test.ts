@@ -35,7 +35,7 @@ test('official local Board: bootstrap, leases, replies, completion, and cursor r
     await until(() => events().some(event => event.type === 'task.claimed'))
     const identity = (await runner.me()).actor
     assert.equal(project(events()).agents.get(identity)?.status, 'Verifying')
-    const held = runner.tasks.held(created.id, claim.claim!)
+    const held = claim
     await held.renew()
     await runner.reply(created.id, 'Independent test evidence.')
     await until(() => events().some(event => event.type === 'task.renewed') && events().some(event => event.type === 'message.posted'))
@@ -48,7 +48,7 @@ test('official local Board: bootstrap, leases, replies, completion, and cursor r
     assert.equal(project(recorded).tasks.get(created.id)?.task.note, 'Accepted')
     assert.equal(new Set(recorded.map(event => event.id)).size, recorded.length)
     assert.ok(recorded.every(event => event.source === 'board'))
-    assert.ok(recorded.every(event => !JSON.stringify(event).includes(claim.claim!.token)))
+    assert.ok(recorded.every(event => !JSON.stringify(event).includes(claim.token)))
   } finally {
     await collector.close()
     db.close()

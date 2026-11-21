@@ -17,6 +17,7 @@ const tasks = {
   T5: { title: 'Investigate the tokenizer dependency', channel: 'engineering', needs: ['T2'], agent: 4 },
   T6: { title: 'Verify search against release criteria', channel: 'verification', needs: ['T3', 'T4', 'T5'], agent: 5, step: 'review' },
   T7: { title: 'Package release notes', channel: 'mission', needs: ['T6'], agent: 6 },
+  T9: { title: 'Prepare rollout documentation', channel: 'mission', needs: ['T2'], agent: 7 },
   T8: { title: 'Correct keyboard focus after navigation', channel: 'engineering', needs: [], agent: 7 },
 } as const
 
@@ -59,9 +60,9 @@ transition('T1', 'claimed', 'Defining release criteria.')
 transition('T1', 'completed', 'Release criteria approved.')
 transition('T2', 'ready', 'Work breakdown requested.', 'task.created')
 transition('T2', 'claimed', 'Splitting indexing, interface, and dependency tracks.')
-for (const key of ['T3', 'T4', 'T5', 'T6', 'T7'] as const) transition(key, 'waiting', 'Dependencies recorded.', 'task.created')
+for (const key of ['T3', 'T4', 'T5', 'T6', 'T7', 'T9'] as const) transition(key, 'waiting', 'Dependencies recorded.', 'task.created')
 transition('T2', 'completed', 'Three execution tracks and an independent review are scheduled.')
-for (const key of ['T3', 'T4', 'T5'] as const) {
+for (const key of ['T3', 'T4', 'T5', 'T9'] as const) {
   transition(key, 'ready', 'Planning dependency satisfied.')
   transition(key, 'claimed', 'Work started.')
 }
@@ -79,6 +80,7 @@ transition('T8', 'completed', 'Search field focus restored after navigation.')
 transition('T6', 'ready', 'Correction is available for a second review.', 'task.reopened')
 transition('T6', 'claimed', 'Running independent acceptance again.')
 transition('T6', 'completed', 'All acceptance checks passed.')
+transition('T9', 'completed', 'Published the operator rollout checklist.')
 transition('T7', 'ready', 'Verification dependency satisfied.')
 transition('T7', 'claimed', 'Assembling the verified release notes.')
 transition('T7', 'completed', 'Release notes reference the acceptance report.')

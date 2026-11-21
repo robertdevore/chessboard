@@ -113,6 +113,12 @@ export function advance(state: State, events: Event[], now?: number, mapping: Re
   }
 
   for (const event of events) {
+    if (event.type === 'snapshot.reconciled') {
+      agents.clear()
+      tasks.clear()
+      messages.clear()
+      continue
+    }
     const actor = event.actor
     if (actor && (['agent', 'profile', 'fixture', 'workflow', 'deployment'].includes(actor.kind) || Object.hasOwn(mapping, actor.id) || agents.has(actor.id))) {
       const known = agents.get(actor.id)
@@ -121,7 +127,9 @@ export function advance(state: State, events: Event[], now?: number, mapping: Re
         kind: actor.kind === 'unknown' ? known?.kind ?? actor.kind : actor.kind, role: mapping[actor.id] ?? actor.role ?? known?.role ?? 'Unmapped',
         status: known?.status ?? 'Unknown', position: known?.position, queued: known?.queued ?? false,
         assignments: known?.assignments ?? [], channel: event.channelId ?? known?.channel,
-        lastSeen: event.evidence === 'snapshot' ? known?.lastSeen : Math.max(event.timestamp, known?.lastSeen ?? 0),
+        lastSeen: event.evidence === 'snapshot'
+          ? event.message ? Math.max(event.message.timestamp, known?.lastSeen ?? 0) : known?.lastSeen
+          : Math.max(event.timestamp, known?.lastSeen ?? 0),
       })
     }
     if (event.message) {
@@ -159,6 +167,7 @@ export function visibleInMission(events: Event[], mission: string) {
   const threads = new Set<string>()
   const labels = new Map<string, Event>()
   for (const event of events) {
+    if (event.type === 'snapshot.reconciled') labels.clear()
     if (!event.message || event.message.id !== event.threadId) continue
     const previous = labels.get(event.message.id)?.message
     if (!previous || event.message.version >= previous.version) labels.set(event.message.id, event)
@@ -168,5 +177,5 @@ export function visibleInMission(events: Event[], mission: string) {
   }
   const agentIds = new Set(events.filter(event => event.threadId && threads.has(event.threadId))
     .flatMap(event => [event.actor?.id, ...event.relatedAgents]))
-  return events.filter(event => event.threadId ? threads.has(event.threadId) : agentIds.has(event.actor?.id))
+  return events.filter(event => event.type === 'snapshot.reconciled' || (event.threadId ? threads.has(event.threadId) : agentIds.has(event.actor?.id)))
 }
