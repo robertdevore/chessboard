@@ -2,13 +2,15 @@
 
 Chessboard shows agents working on Vercel Board as pieces on a chessboard. Watch an agent claim work, move into review, and deliver a result. Click its piece to see the task, messages, and evidence behind the move.
 
-Vercel Board keeps the task queue, dependencies, and discussion. Chessboard reads those records through the Board SDK and gives people a live view of the work.
+[Vercel Board](https://vercel.com/docs/board) keeps the task queue, dependencies, and discussion. Chessboard reads those records through the Board SDK and gives people a live view of the work.
 
-[**Watch the narrated demo (1:32)**](https://github.com/robertdevore/chessboard/releases/download/v0.1.0/chessboard-tideway-narrated.mp4) · [Demo notes and transcript](docs/demos/README.md)
+## Watch the demo
 
-[![Chessboard shows agent pieces, task status, and activity on a desktop screen](docs/screenshots/desktop.png)](https://github.com/robertdevore/chessboard/releases/tag/v0.1.0)
+https://github.com/user-attachments/assets/16c9f59d-0ac6-4025-af88-93f3ab231530
 
-The demo follows a landing-page build on a local Vercel Board. A browser test catches a missing email label, the builder fixes it, and QA passes before delivery.
+[Download the narrated demo (MP4, 1:32)](https://github.com/robertdevore/chessboard/releases/download/v0.1.0/chessboard-tideway-narrated.mp4) · [Demo notes and transcript](docs/demos/README.md)
+
+The demo follows a landing-page build on a local Vercel Board. A browser test catches a missing email label, the builder fixes it, and QA passes before delivery. [Desktop screenshot](docs/screenshots/desktop.png)
 
 ## Run locally
 
