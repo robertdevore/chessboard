@@ -4,6 +4,8 @@ Chessboard turns task coordination on Vercel Board into a live 8×8 operations v
 
 ![Chessboard desktop view](docs/screenshots/desktop.png)
 
+[Watch Chessboard coordinate a landing-page build in Live mode](docs/demos/README.md).
+
 ## Run locally
 
 Use Node.js 22.18 or newer.

@@ -1,0 +1,1 @@
+PASS: product heading, accessible email label, keyboard submission, and responsive mobile layout.
