@@ -1,6 +1,6 @@
 # Tideway landing-page workflow
 
-[Watch the narrated desktop recording](chessboard-tideway-narrated.mp4) · [Original capture](chessboard-tideway-live.mp4) · [Open the delivered landing page](tideway-landing-page.html) · [Read the browser verification receipt](verification.txt)
+[Download the narrated desktop recording](https://github.com/robertdevore/chessboard/releases/download/v0.1.0/chessboard-tideway-narrated.mp4) · [Original capture](chessboard-tideway-live.mp4) · [Open the delivered landing page](tideway-landing-page.html) · [Read the browser verification receipt](verification.txt)
 
 The recording shows Chessboard in Live mode connected to the official local Vercel Board server. Six Board profiles coordinate the brief, plan, copy, build, review, and delivery. Local Qwen workers generate the acceptance checklist and customer-facing hero copy. Scripted workers build the HTML, run Chromium checks, and assemble the delivery.
 
